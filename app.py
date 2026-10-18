@@ -36,6 +36,7 @@ header[data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecor
 [data-testid="stMainBlockContainer"], .block-container { padding: 0 !important; max-width: none !important; }
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stAppViewContainer"] > section, [data-testid="stMain"] { overflow-x: clip; }
+[data-stale="true"], [data-testid="stElementContainer"] { opacity: 1 !important; transition: none !important; }
 </style>""")
 
 error = db.check_connection()
