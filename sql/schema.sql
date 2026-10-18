@@ -56,6 +56,9 @@ CREATE TABLE ACTOR (
     --   ถ้าลบทักษะ/ผลงานจนหมด ระบบจะตั้งกลับเป็น 0 เอง
     bio                VARCHAR(500)  NULL,
     is_public          BOOLEAN       NOT NULL DEFAULT FALSE,
+    -- รูปโปรไฟล์: ตัวรูปอยู่ในตาราง ACTOR_PHOTO (แยกไว้ไม่ให้การอ่านตาราง ACTOR ช้า)
+    --   photo_ver = เลขเวอร์ชันของรูป (0 = ไม่มีรูป) เปลี่ยนทุกครั้งที่เปลี่ยนรูป เบราว์เซอร์ใช้เช็กว่าต้องโหลดรูปใหม่ไหม
+    photo_ver          BIGINT        NOT NULL DEFAULT 0,
     CONSTRAINT ck_actor_gender CHECK (gender IN ('Male','Female','Other')),
     CONSTRAINT ck_actor_status CHECK (actor_status IN ('Active','Inactive')),
     CONSTRAINT ck_actor_height CHECK (height_cm BETWEEN 100 AND 230),
@@ -72,6 +75,16 @@ CREATE TABLE ACTOR (
     CONSTRAINT ck_actor_htex   CHECK (hair_texture IN ('Straight','Wavy','Curly')),
     CONSTRAINT ck_actor_eye    CHECK (eye_color IN ('Black','Dark_Brown','Brown','Hazel','Green','Blue','Gray')),
     CONSTRAINT ck_actor_exp    CHECK (experience_level IN ('Beginner','Intermediate','Professional'))
+) ENGINE=InnoDB;
+
+-- 2.1) ACTOR_PHOTO (รูปโปรไฟล์ 1 รูปต่อนักแสดง 1 คน : ACTOR 1 --- 0..1 ACTOR_PHOTO) ----
+--   เก็บเป็น data URL (ข้อความ base64) ของรูป JPEG ที่ย่อแล้ว ไม่กี่สิบ KB
+--   ไม่เก็บเป็นไฟล์ในเครื่อง เพราะที่เก็บไฟล์บน Streamlit Cloud ไม่ถาวร (รีสตาร์ตแล้วหาย)
+CREATE TABLE ACTOR_PHOTO (
+    actor_id    INT PRIMARY KEY,
+    photo       MEDIUMTEXT NOT NULL,
+    updated_at  TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_photo_actor FOREIGN KEY (actor_id) REFERENCES ACTOR(actor_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- 3) SKILL -------------------------------------------------------------

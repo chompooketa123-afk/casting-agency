@@ -297,7 +297,7 @@ function scallop(x0, x1, y, n, depth) {
   for (let i = 0; i < n; i++) { d += ` Q${(x - step / 2).toFixed(1)} ${y + depth} ${(x - step).toFixed(1)} ${y}`; x -= step; }
   return d;
 }
-function avatar(a) {
+function avatarSvg(a) {
   const skin = SKIN[a.skin] || SKIN.Medium, hairC = HAIR[a.hairC] || HAIR.Dark_Brown, eyeC = EYEC[a.eye] || EYEC.Dark_Brown;
   const length = a.hairL || 'Short', texture = a.hairT || 'Straight', body = a.body || 'Average', detail = a.look || '';
   const cloth = CLOTHES[(a.id * 3 + 1) % CLOTHES.length], sw = SHOULDER[body] || 66, fw = a.gender === 'Male' ? 36 : 33;
@@ -339,6 +339,51 @@ function avatar(a) {
   P.push(`<path d="M91.5 129 Q100 124.5 108.5 129 Q100 138 91.5 129 Z" fill="${lip}"/>`);
   return `<svg class="avatar" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax slice" role="img" aria-label="${esc(a.name)}">${P.join('')}</svg>`;
 }
+/* ---------- รูปโปรไฟล์จริง ----------
+   ตัวรูปเก็บใน MySQL (ตาราง ACTOR_PHOTO) ข้อมูลหลักมีแค่เลขเวอร์ชัน a.pv (0 = ไม่มีรูป)
+   หน้าเว็บโหลดรูปแยก (คำสั่ง getPhotos) แล้วจำไว้ใน PHOTOS ตามเลขเวอร์ชัน ไม่ต้องโหลดซ้ำทุกครั้งที่รีเฟรช
+   ระหว่างรอรูป (หรือไม่มีรูป) ใช้ภาพวาดตัวแทนไปก่อน */
+const PHOTOS = {};   // id นักแสดง -> { ver, url }
+const photoOf = a => { const c = PHOTOS[a.id]; return a.pv && c && c.ver === a.pv ? c.url : null; };
+const photoImg = (url, a) => `<img class="avatar photo" src="${url}" alt="${esc(a.name)}" draggable="false">`;
+function avatar(a) {
+  if (!a.pv) return avatarSvg(a);
+  const u = photoOf(a);
+  return `<div class="avphoto" data-aid="${a.id}" data-shown="${u ? a.pv : ''}">${u ? photoImg(u, a) : avatarSvg(a)}</div>`;
+}
+/* ใส่รูปที่เพิ่งโหลดเสร็จลงในหน้าที่แสดงอยู่ โดยไม่ต้องวาดหน้าใหม่ (ไม่รบกวนช่องที่กำลังพิมพ์) */
+function paintPhotos() {
+  $$('.avphoto[data-aid]').forEach(el => {
+    const a = actorOf(Number(el.dataset.aid)); if (!a) return;
+    const u = photoOf(a);
+    if (u && el.dataset.shown !== String(a.pv)) { el.innerHTML = photoImg(u, a); el.dataset.shown = String(a.pv); }
+  });
+}
+/* ย่อรูปในเบราว์เซอร์ก่อนส่ง: ตัดเป็นสัดส่วน 4:5 (เน้นช่วงบนที่มักเป็นใบหน้า) ขนาด 360x450 เป็น JPEG ราว 30-90 KB */
+const PHOTO_W = 360, PHOTO_H = 450, PHOTO_MAX_CHARS = 110000;
+async function readPhoto(file) {
+  if (!file) fail('ไม่พบไฟล์รูป');
+  if (!/^image\//.test(file.type)) fail('เลือกไฟล์รูปภาพเท่านั้น (JPG, PNG)');
+  if (file.size > 20 * 1024 * 1024) fail('ไฟล์ใหญ่เกินไป (ไม่เกิน 20 MB)');
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new BizErr('เปิดรูปนี้ไม่ได้ ลองบันทึกเป็นไฟล์ JPG หรือ PNG แล้วเลือกใหม่')); i.src = url; });
+    const sw = img.naturalWidth, sh = img.naturalHeight;
+    if (!sw || !sh) fail('เปิดรูปนี้ไม่ได้');
+    const r = PHOTO_W / PHOTO_H;
+    const cw = sw / sh > r ? sh * r : sw, ch = sw / sh > r ? sh : sw / r;
+    const cv = document.createElement('canvas'); cv.width = PHOTO_W; cv.height = PHOTO_H;
+    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, PHOTO_W, PHOTO_H);
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, (sw - cw) / 2, (sh - ch) * 0.25, cw, ch, 0, 0, PHOTO_W, PHOTO_H);
+    let q = 0.84, out = cv.toDataURL('image/jpeg', q);
+    while (out.length > PHOTO_MAX_CHARS && q > 0.35) { q -= 0.08; out = cv.toDataURL('image/jpeg', q); }
+    if (!out.startsWith('data:image/jpeg')) fail('เบราว์เซอร์นี้ย่อรูปไม่ได้ ลองใช้เบราว์เซอร์อื่น');
+    if (out.length > PHOTO_MAX_CHARS * 1.3) fail('รูปนี้ละเอียดเกินไป ลองใช้รูปอื่น');
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
+
 const SPARK = (s = 12) => `<svg class="spark" width="${s}" height="${s}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0 C13 8 16 11 24 12 C16 13 13 16 12 24 C11 16 8 13 0 12 C8 11 11 8 12 0Z" fill="#B8955A"/></svg>`;
 const BOW = `<svg class="bow" viewBox="0 0 120 90" aria-hidden="true"><path d="M60 52 C30 6 4 14 8 40 C12 66 44 62 60 52 Z" fill="#D8BF8C"/><path d="M60 52 C90 6 116 14 112 40 C108 66 76 62 60 52 Z" fill="#C7A468"/><path d="M60 52 C46 60 30 80 22 88 L40 84 L56 62 Z" fill="#B8955A"/><path d="M60 52 C74 60 90 80 98 88 L80 84 L64 62 Z" fill="#A98445"/><circle cx="60" cy="50" r="11" fill="#E6D2A3"/></svg>`;
 const eyeIcon = (off, c) => `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>${off ? '<path d="M3 3l18 18"/>' : ''}</svg>`;

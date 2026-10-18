@@ -79,6 +79,39 @@ function remote(op, args) {
   chain = p.then(() => {}, () => {});
   return p;
 }
+/* ---------- โหลดรูปโปรไฟล์ที่ยังไม่มีในเครื่อง (ครั้งละไม่เกิน 12 รูป) ---------- */
+let PH_BUSY = false;
+const PH_TRIED = new Set();
+async function ensurePhotos() {
+  if (PH_BUSY || !DB || !SEND) return;
+  PH_BUSY = true;
+  try {
+    for (let guard = 0; guard < 20; guard++) {
+      const need = DB.actors.filter(a => a.pv && !photoOf(a) && !PH_TRIED.has(a.id + ':' + a.pv));
+      if (!need.length) break;
+      const batch = need.slice(0, 12), keys = batch.map(a => a.id + ':' + a.pv);
+      keys.forEach(k => PH_TRIED.add(k));
+      const rep = await remote('getPhotos', { ids: batch.map(a => a.id) });
+      if (!rep.ok || !rep.result) { keys.forEach(k => PH_TRIED.delete(k)); break; }
+      for (const [id, p] of Object.entries(rep.result)) PHOTOS[Number(id)] = { ver: p.ver, url: p.url };
+      paintPhotos();
+    }
+  } finally { PH_BUSY = false; }
+}
+const queuePhotos = () => setTimeout(ensurePhotos, 0);
+/* เลือกไฟล์รูป -> ย่อในเบราว์เซอร์ -> ฟอร์มสมัคร/แก้ไข ('rg') เก็บเป็นฉบับร่างรอกดบันทึก / หน้าโปรไฟล์ ('pf') อัปโหลดทันที */
+async function pickPhoto(mode, file) {
+  snap();
+  let url;
+  try { toast('กำลังเตรียมรูป…', 'info'); url = await readPhoto(file); }
+  catch (e) { if (e instanceof BizErr) { toast(e.message, 'bad'); return; } throw e; }
+  if (mode === 'rg') { F['rg.photo'] = url; toast('เลือกรูปแล้ว กดปุ่มบันทึกด้านล่างเพื่อเก็บลงฐานข้อมูล'); render(); return; }
+  const id = meActor().id, pv = Date.now();
+  const r = await doit(null, 'อัปโหลดรูปโปรไฟล์แล้ว', ['setPhoto', { id, photo: url, pv }]);
+  if (r.ok) PHOTOS[id] = { ver: pv, url };
+  render();
+}
+
 /* fn = ตรวจกฎ+ลองทำบนข้อมูลในหน้าเว็บก่อน (ผิดกฎก็แจ้งทันที)  op = [ชื่อคำสั่ง, ข้อมูล] ส่งไปให้ MySQL ทำจริง */
 async function doit(fn, okMsg, op) {
   let r0;
@@ -157,16 +190,31 @@ const A = {
   pay_mark: async el => { const id = Number(el.dataset.id); await doit(() => markPaid(id), 'บันทึกว่าจ่ายแล้ว', ['markPaid', { pid: id }]); render(); },
   /* นักแสดง */
   rg_mode: el => { S.rgMode = el.dataset.v; if (S.rgMode === 'new') clearRg(); else S.rgLoaded = null; render(); },
+  ph_pick: el => { const inp = $(`#phin-${el.dataset.m}`); if (inp) inp.click(); },
+  ph_del: async el => {
+    if (el.dataset.m === 'rg') { if (typeof F['rg.photo'] === 'string') delete F['rg.photo']; else F['rg.photo'] = null; render(); return; }
+    const id = meActor().id;
+    const r = await doit(null, 'ลบรูปแล้ว กลับไปใช้ภาพวาดตัวแทน', ['clearPhoto', { id }]);
+    if (r.ok) delete PHOTOS[id];
+    render();
+  },
   rg_save: async () => {
     const edit = S.rgMode === 'edit', f = gatherRg(), sk = pickedSkills('rg.sk');
+    const draft = F['rg.photo'], pv = Date.now();       // undefined = ไม่แตะรูป, null = ลบรูป, ข้อความ = รูปใหม่
+    const withPhoto = a => { if (draft !== undefined) { a.photo = draft; if (draft) a.pv = pv; } return a; };
     if (edit) {
       const me = meActor();
-      const r = await doit(() => updateActor(me.id, f, sk), v => v ? 'บันทึกโปรไฟล์แล้ว' : 'บันทึกแล้ว (โปรไฟล์ซ่อนอยู่ เพราะยังไม่มีทักษะหรือผลงาน)', ['updateActor', { id: me.id, f, skills: sk }]);
-      if (r.ok) S.pfLoaded = null; render(); return;
+      const r = await doit(() => updateActor(me.id, f, sk), v => v ? 'บันทึกโปรไฟล์แล้ว' : 'บันทึกแล้ว (โปรไฟล์ซ่อนอยู่ เพราะยังไม่มีทักษะหรือผลงาน)', ['updateActor', withPhoto({ id: me.id, f, skills: sk })]);
+      if (r.ok) {
+        S.pfLoaded = null;
+        if (draft !== undefined) { if (draft) PHOTOS[me.id] = { ver: pv, url: draft }; else delete PHOTOS[me.id]; delete F['rg.photo']; }
+      }
+      render(); return;
     }
     const publish = !!F['rg.publish'];
-    const r = await doit(() => registerActor(f, sk, publish), id => `สมัครสำเร็จ รหัส #${id}`, ['registerActor', { f, skills: sk, publish }]);
+    const r = await doit(() => registerActor(f, sk, publish), id => `สมัครสำเร็จ รหัส #${id}`, ['registerActor', withPhoto({ f, skills: sk, publish })]);
     if (r.ok) {
+      if (typeof draft === 'string') PHOTOS[r.r] = { ver: pv, url: draft };
       setMe(r.r); const a = actorOf(r.r); clearRg(); S.pfLoaded = null; S.page = 'actor_profile';
       if (a && !a.pub) toast(`สมัครสำเร็จ รหัส #${a.id} · โปรไฟล์ยังซ่อนอยู่ เพิ่มทักษะหรือผลงานแล้วกดเผยแพร่`);
       render(); scroller().scrollTo(0, 0);
@@ -215,6 +263,7 @@ ROOT.addEventListener('keydown', ev => {
 document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && S.dlg && window.__CASTING && window.__CASTING.root === ROOT) A.close(); });
 ROOT.addEventListener('change', ev => {
   const el = ev.target;
+  if (el.dataset && el.dataset.photo) { const file = el.files && el.files[0]; el.value = ''; if (file) pickPhoto(el.dataset.photo, file); return; }
   const c = el.closest('[data-chg]');
   if (c) { snap(); CHG[c.dataset.chg](c, ev); return; }
   if (!el.dataset) return;
@@ -230,16 +279,20 @@ function update(data, setTrigger) {
   if (!data || !data.snap) return;
   if (rep && PENDING[rep.id]) {
     const done = PENDING[rep.id]; delete PENDING[rep.id];
-    applySnap(data.snap); LASTVER = data.ver; done(rep); return;
+    applySnap(data.snap); LASTVER = data.ver; done(rep); queuePhotos(); return;
   }
-  if (!busy() && data.ver !== LASTVER) { const first = !DB; applySnap(data.snap); LASTVER = data.ver; render(); if (first) applyTheme(); }
+  if (!busy() && data.ver !== LASTVER) { const first = !DB; applySnap(data.snap); LASTVER = data.ver; render(); if (first) applyTheme(); queuePhotos(); }
 }
 /* ดึงข้อมูลล่าสุดอัตโนมัติทุก 20 วินาที (เพื่อนในกลุ่มแก้อะไรจะเห็น) ยกเว้นตอนกำลังพิมพ์/เปิดหน้าต่างโปรไฟล์ */
 const timer = setInterval(() => {
   if (window.__CASTING && window.__CASTING.root !== ROOT) { clearInterval(timer); return; }
   const ae = ROOT.activeElement;
   if (!SEND || busy() || S.dlg || (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) || document.hidden) return;
-  remote('refresh');
+  const before = JSON.stringify(DB);
+  remote('refresh').then(() => {          // ถ้าเพื่อนแก้ข้อมูล (หรือเปลี่ยนรูป) ให้วาดหน้าใหม่ด้วย ไม่งั้นข้อมูลถูกโหลดแล้วแต่หน้ายังเป็นของเก่า
+    const typing = ROOT.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(ROOT.activeElement.tagName);
+    if (DB && JSON.stringify(DB) !== before && !busy() && !S.dlg && !typing && !document.hidden) { snap(); render(); queuePhotos(); }
+  });
 }, 20000);
 applyTheme();
 return { root: ROOT, update, render };

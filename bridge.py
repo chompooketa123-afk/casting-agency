@@ -52,6 +52,7 @@ def snapshot():
         "hairC": r["hair_color"], "hairL": r["hair_length"], "hairT": r["hair_texture"], "eye": r["eye_color"],
         "tattoo": bool(r["has_tattoo"]), "pierce": bool(r["has_piercing"]), "exp": r["experience_level"],
         "prov": r["province"], "travel": bool(r["can_travel"]),
+        "pv": int(r.get("photo_ver") or 0),      # เวอร์ชันรูปโปรไฟล์ (0 = ไม่มีรูป) ตัวรูปโหลดแยกด้วยคำสั่ง getPhotos
         "skills": aks.get(r["actor_id"], []), "works": works.get(r["actor_id"], []),
     } for r in Q("SELECT * FROM ACTOR ORDER BY actor_id")]
     projects = [{"id": r["project_id"], "name": r["project_name"], "type": r["project_type"],
@@ -105,13 +106,16 @@ def _work(w):
 def _register(a):
     f = a["f"]
     return q.register_actor(f.get("name"), f.get("gender") or "Female", f.get("look"), a["skills"],
-                            profile=_profile(f), bio=f.get("bio"), publish=bool(a.get("publish")))
+                            profile=_profile(f), bio=f.get("bio"), publish=bool(a.get("publish")),
+                            photo=a.get("photo"), photo_ver=a.get("pv"))
 
 
 def _update(a):
     f = a["f"]
+    # คีย์ "photo" ไม่มี = ไม่แตะรูป / เป็น null = ลบรูป / เป็นข้อความ data URL = เปลี่ยนรูป
+    photo = a["photo"] if "photo" in a else q._KEEP
     return q.update_actor(a["id"], f.get("name"), f.get("gender"), f.get("status") or "Active", f.get("look"),
-                          a["skills"], profile=_profile(f), bio=f.get("bio"))
+                          a["skills"], profile=_profile(f), bio=f.get("bio"), photo=photo, photo_ver=a.get("pv"))
 
 
 def _create_role(a):
@@ -127,6 +131,9 @@ OPS = {
     "registerActor": _register,
     "updateActor": _update,
     "setPublic": lambda a: q.set_profile_public(a["id"], bool(a["pub"])),
+    "setPhoto": lambda a: q.set_actor_photo(a["id"], a.get("photo"), a.get("pv")),
+    "clearPhoto": lambda a: q.clear_actor_photo(a["id"]),
+    "getPhotos": lambda a: q.get_photos(a.get("ids")),
     "addWork": lambda a: q.add_work(a["aid"], *_work(a["w"])),
     "updateWork": lambda a: q.update_work(a["aid"], a["wid"], *_work(a["w"])),
     "deleteWork": lambda a: q.delete_work(a["aid"], a["wid"]),
@@ -140,6 +147,7 @@ OPS = {
 # ชื่อตารางที่แต่ละคำสั่งแตะ (โชว์ใต้หน้าเว็บให้อาจารย์ดู)
 TOUCH = {
     "registerActor": "ACTOR, ACTOR_SKILL", "updateActor": "ACTOR, ACTOR_SKILL", "setPublic": "ACTOR",
+    "setPhoto": "ACTOR_PHOTO, ACTOR", "clearPhoto": "ACTOR_PHOTO, ACTOR", "getPhotos": "ACTOR_PHOTO",
     "addWork": "PORTFOLIO", "updateWork": "PORTFOLIO", "deleteWork": "PORTFOLIO, ACTOR",
     "createProject": "PROJECT", "setProjectStatus": "PROJECT",
     "createRole": "ROLE, ROLE_SKILL, SCHEDULE, PAYMENT_INSTALLMENT", "respondRole": "ROLE, PAYMENT_INSTALLMENT",
@@ -156,7 +164,7 @@ def handle(op, args):
         if fn is None:
             raise q.BusinessError("ไม่รู้จักคำสั่ง " + str(op))
         res = fn(args or {})
-        out["result"] = res if isinstance(res, (int, bool, str, type(None))) else None
+        out["result"] = res if isinstance(res, (int, bool, str, dict, type(None))) else None
     except q.BusinessError as e:
         out.update(ok=False, error=str(e))
     except mysql.connector.Error as e:

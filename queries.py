@@ -16,7 +16,9 @@ queries.py : SQL ทั้งหมดของระบบอยู่ที่
   [G] ค้นหานักแสดง          search_actors
   [H] Dashboard
 """
+import base64
 import re
+import time as _time
 from datetime import date, time
 from decimal import Decimal
 
@@ -144,14 +146,97 @@ def _sync_visibility(tx, actor_id):
     return bool(rows and rows[0]["is_public"])
 
 
-def register_actor(full_name, gender, appearance_detail, skill_ids, profile=None, bio=None, publish=True):
+# ---------------------------------------------------------------------
+# รูปโปรไฟล์ (ตาราง ACTOR_PHOTO + ACTOR.photo_ver)
+#   หน้าเว็บย่อรูปเป็น JPEG ขนาดเล็กก่อนส่งมา ที่นี่ตรวจซ้ำว่าเป็นรูปจริง ไม่ใหญ่เกิน แล้วค่อยเก็บ
+# ---------------------------------------------------------------------
+MAX_PHOTO_CHARS = 150_000          # ความยาวข้อความ base64 สูงสุด (รูปที่ย่อแล้วอยู่ราว 30-110 KB)
+MAX_PHOTOS_PER_CALL = 12
+_PHOTO_RE = re.compile(r"^data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$")
+_MAGIC = {"jpeg": (b"\xff\xd8\xff",), "png": (b"\x89PNG\r\n\x1a\n",), "webp": (b"RIFF",)}
+
+
+def clean_photo(photo):
+    """ตรวจรูปที่ส่งมา (data URL) -> คืนค่าเดิมถ้าใช้ได้ ไม่งั้น BusinessError
+    ตรวจรูปแบบข้อความอย่างเข้ม (ใช้ใส่ใน <img src> ของหน้าเว็บ) และดูไบต์แรกว่าเป็นไฟล์รูปจริง"""
+    m = _PHOTO_RE.match(photo) if isinstance(photo, str) else None
+    if not m:
+        raise BusinessError("ไฟล์รูปไม่ถูกต้อง (รองรับ JPG, PNG, WebP)")
+    if len(photo) > MAX_PHOTO_CHARS:
+        raise BusinessError("รูปใหญ่เกินไป ลองใช้รูปอื่นหรือรูปที่เล็กลง")
+    try:
+        raw = base64.b64decode(m.group(2), validate=True)
+    except Exception:
+        raise BusinessError("ไฟล์รูปไม่ถูกต้อง")
+    kind = m.group(1)
+    if not raw.startswith(_MAGIC[kind]) or (kind == "webp" and raw[8:12] != b"WEBP"):
+        raise BusinessError("ไฟล์นี้ไม่ใช่รูปภาพจริง")
+    return photo
+
+
+def _photo_ver(ver):
+    """เลขเวอร์ชันรูปจากหน้าเว็บ (เวลาเป็นมิลลิวินาที) ถ้าไม่สมเหตุสมผลให้ใช้เวลาของเซิร์ฟเวอร์"""
+    try:
+        v = int(ver)
+    except (TypeError, ValueError):
+        v = 0
+    return v if 1 <= v < 10 ** 14 else _time.time_ns() // 1_000_000
+
+
+def _store_photo(tx, actor_id, photo, ver):
+    tx.execute("INSERT INTO ACTOR_PHOTO (actor_id, photo) VALUES (%s, %s) "
+               "ON DUPLICATE KEY UPDATE photo = VALUES(photo), updated_at = CURRENT_TIMESTAMP", (actor_id, photo))
+    tx.execute("UPDATE ACTOR SET photo_ver = %s WHERE actor_id = %s", (ver, actor_id))
+
+
+def _drop_photo(tx, actor_id):
+    tx.execute("DELETE FROM ACTOR_PHOTO WHERE actor_id = %s", (actor_id,))
+    tx.execute("UPDATE ACTOR SET photo_ver = 0 WHERE actor_id = %s", (actor_id,))
+
+
+def set_actor_photo(actor_id, photo, ver=None):
+    """ปุ่ม 'เลือกรูป' ในหน้าโปรไฟล์ : REPLACE รูปของนักแสดง (ACTOR_PHOTO) + ขยับ ACTOR.photo_ver  คืนเลขเวอร์ชันใหม่"""
+    photo, ver = clean_photo(photo), _photo_ver(ver)
+    with transaction() as tx:
+        if not tx.query("SELECT 1 AS x FROM ACTOR WHERE actor_id = %s", (actor_id,)):
+            raise BusinessError("ไม่พบนักแสดงคนนี้")
+        _store_photo(tx, actor_id, photo, ver)
+    return ver
+
+
+def clear_actor_photo(actor_id):
+    """ปุ่ม 'ลบรูป' : DELETE จาก ACTOR_PHOTO + ตั้ง ACTOR.photo_ver = 0 (หน้าเว็บกลับไปใช้ภาพวาดตัวแทน)"""
+    with transaction() as tx:
+        _drop_photo(tx, actor_id)
+
+
+def get_photos(actor_ids):
+    """อ่านรูปตาม id ที่ขอ (ครั้งละไม่เกิน 12 รูป) -> {"id": {"ver": เลขเวอร์ชัน, "url": data URL}}
+    หน้าเว็บโหลดรูปแยกจากข้อมูลหลัก เพื่อให้การรีเฟรชทุก 20 วินาทีไม่ต้องลากรูปทั้งหมดมาซ้ำ"""
+    ids = []
+    for i in actor_ids or []:
+        i = int(i)
+        if i not in ids:
+            ids.append(i)
+    ids = ids[:MAX_PHOTOS_PER_CALL]
+    if not ids:
+        return {}
+    rows = query("SELECT p.actor_id, p.photo, a.photo_ver FROM ACTOR_PHOTO p JOIN ACTOR a ON a.actor_id = p.actor_id "
+                 f"WHERE p.actor_id IN ({_marks(ids)})", ids, log=False)
+    return {str(r["actor_id"]): {"ver": int(r["photo_ver"]), "url": r["photo"]} for r in rows}
+
+
+def register_actor(full_name, gender, appearance_detail, skill_ids, profile=None, bio=None, publish=True,
+                   photo=None, photo_ver=None):
     """ปุ่ม 'สมัครเป็นนักแสดง' : INSERT ACTOR แล้ว INSERT ACTOR_SKILL หลายแถว (ใน transaction เดียว)
     profile = dict รูปลักษณ์ (ส่วนสูง สีผม ฯลฯ) ถ้าไม่ส่งมาก็ปล่อยว่าง
-    publish = ขอเปิดโปรไฟล์ให้คนอื่นเห็นทันที แต่จะเปิดให้ก็ต่อเมื่อมีทักษะอย่างน้อย 1 อย่าง"""
+    publish = ขอเปิดโปรไฟล์ให้คนอื่นเห็นทันที แต่จะเปิดให้ก็ต่อเมื่อมีทักษะอย่างน้อย 1 อย่าง
+    photo = รูปโปรไฟล์ (data URL) ไม่บังคับ ถ้ามีจะ INSERT ACTOR_PHOTO ใน transaction เดียวกัน"""
     full_name = (full_name or "").strip()
     if not full_name:
         raise BusinessError("กรุณากรอกชื่อ-นามสกุล")
     prof = clean_profile(profile)
+    photo = clean_photo(photo) if photo else None
     skill_ids = sorted(set(skill_ids))
     cols = ["full_name", "gender", "actor_status", "appearance_detail", "bio", "is_public"] + list(prof)
     vals = [full_name, gender, "Active", (appearance_detail or "").strip() or None, _clean_bio(bio),
@@ -161,16 +246,22 @@ def register_actor(full_name, gender, appearance_detail, skill_ids, profile=None
             f"INSERT INTO ACTOR ({', '.join(cols)}) VALUES ({_marks(cols)})", vals)
         for sid in skill_ids:
             tx.execute("INSERT INTO ACTOR_SKILL (actor_id, skill_id) VALUES (%s, %s)", (actor_id, sid))
+        if photo:
+            _store_photo(tx, actor_id, photo, _photo_ver(photo_ver))
     return actor_id
 
 
-def update_actor(actor_id, full_name, gender, actor_status, appearance_detail, skill_ids, profile=None, bio=_KEEP):
+def update_actor(actor_id, full_name, gender, actor_status, appearance_detail, skill_ids, profile=None, bio=_KEEP,
+                 photo=_KEEP, photo_ver=None):
     """ปุ่ม 'บันทึกโปรไฟล์' : UPDATE ACTOR + ลบทักษะเก่า + ใส่ทักษะใหม่ (transaction เดียว)
     ถ้าไม่ส่ง profile มา จะไม่แตะคอลัมน์รูปลักษณ์ / ไม่ส่ง bio มา จะไม่แตะคำแนะนำตัว
+    photo: ไม่ส่งมา = ไม่แตะรูป / None = ลบรูป / data URL = เปลี่ยนรูป
     คืน True/False = หลังบันทึกแล้วโปรไฟล์ยังเปิดให้คนอื่นเห็นอยู่ไหม (ลบทักษะหมดและไม่มีผลงาน = ปิดเอง)"""
     full_name = (full_name or "").strip()
     if not full_name:
         raise BusinessError("ชื่อห้ามว่าง")
+    if photo is not _KEEP and photo is not None:
+        photo = clean_photo(photo)
     sets = ["full_name=%s", "gender=%s", "actor_status=%s", "appearance_detail=%s"]
     vals = [full_name, gender, actor_status, (appearance_detail or "").strip() or None]
     if bio is not _KEEP:
@@ -185,6 +276,10 @@ def update_actor(actor_id, full_name, gender, actor_status, appearance_detail, s
         tx.execute("DELETE FROM ACTOR_SKILL WHERE actor_id=%s", (actor_id,))
         for sid in sorted(set(skill_ids)):
             tx.execute("INSERT INTO ACTOR_SKILL (actor_id, skill_id) VALUES (%s, %s)", (actor_id, sid))
+        if photo is None:
+            _drop_photo(tx, actor_id)
+        elif photo is not _KEEP:
+            _store_photo(tx, actor_id, photo, _photo_ver(photo_ver))
         return _sync_visibility(tx, actor_id)
 
 

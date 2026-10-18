@@ -142,7 +142,7 @@ details.fold > .in { padding: 0 1.2rem 1.1rem; }
 .tcard .tag { position: absolute; bottom: .6rem; right: .6rem; z-index: 2; } .tcard .tag .badge { background: rgba(255, 255, 255, .92); color: #6B5224; }
 .tcard .body { padding: .85rem .3rem 0; }
 .tcard .nm { font: 500 1.2rem/1.3 var(--serif); } .tcard .meta { color: rgba(31, 26, 29, .68); font-size: .83rem; margin: .15rem 0 .5rem; }
-.tcard.off .frame svg.avatar { filter: grayscale(.85); opacity: .75; }
+.tcard.off .frame svg.avatar, .tcard.off .frame img.avatar { filter: grayscale(.85); opacity: .75; }
 .tgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
 .comp { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 1.2rem; align-items: start; }
 .comp .tcard { padding: .6rem; border-radius: 22px; height: auto; cursor: default; }
@@ -176,6 +176,16 @@ details.fold > .in { padding: 0 1.2rem 1.1rem; }
 .arch { flex: 1 1 0; max-width: 190px; border-radius: 999px 999px 22px 22px; overflow: hidden; position: relative; background: var(--rose); }
 .arch.a1 { aspect-ratio: 5/8; background: var(--powder); } .arch.a2 { aspect-ratio: 5/10; background: var(--rose); margin-bottom: 2.2rem; } .arch.a3 { aspect-ratio: 5/7; background: var(--champ); }
 .arch svg.avatar { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* รูปโปรไฟล์จริง (ใช้แทนภาพวาดตัวแทนเมื่อนักแสดงอัปโหลดรูป) */
+.avphoto { position: absolute; inset: 0; }
+.avphoto svg.avatar, img.avatar { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+img.avatar { object-fit: cover; object-position: 50% 22%; background: var(--paper-2); user-select: none; -webkit-user-drag: none; }
+.photobox { display: flex; gap: 1.4rem; align-items: center; flex-wrap: wrap; }
+.photobox .pv { position: relative; flex: 0 0 auto; width: 150px; aspect-ratio: 4 / 5; border-radius: 999px 999px 18px 18px; overflow: hidden; background: var(--rose); border: 1px solid var(--line); }
+.photobox .ph-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .3rem; padding: 1rem; text-align: center; color: var(--tile-ink); }
+.photobox .ph-empty b { font: 500 1rem var(--serif); } .photobox .ph-empty span { font-size: .74rem; opacity: .72; line-height: 1.4; }
+.photobox .pb-side { flex: 1 1 15rem; min-width: 0; }
+.photobox .pb-note { margin: 0; color: var(--muted); font-size: .9rem; line-height: 1.6; max-width: 56ch; }
 .float-badge { position: absolute; z-index: 3; background: var(--card); border-radius: 999px; padding: .5rem 1rem; font-size: .8rem; font-weight: 500; box-shadow: 0 14px 24px -14px var(--shadow); border: 1px solid var(--line); display: flex; align-items: center; gap: .45rem; }
 .float-badge.b1 { left: -.2rem; top: 3.4rem; } .float-badge.b2 { right: -.1rem; bottom: 1.2rem; }
 .strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 1.6rem 0 .4rem; }

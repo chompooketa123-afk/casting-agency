@@ -54,5 +54,24 @@ check("กดจ่ายซ้ำถูกปฏิเสธ", (not r["ok"]) an
 r = bridge.handle("hackIt", {})
 check("คำสั่งที่ไม่รู้จักถูกปฏิเสธ", not r["ok"])
 
-print(f"\nผ่าน {ok} / 14 ข้อ")
-sys.exit(0 if ok == 14 else 1)
+# ---- รูปโปรไฟล์ ----
+import base64  # noqa: E402
+import db  # noqa: E402
+
+PNG = "data:image/png;base64," + base64.b64encode(bytes.fromhex("89504e470d0a1a0a") + b"x" * 40).decode()
+r = bridge.handle("setPhoto", {"id": aid, "photo": PNG, "pv": 1234567890123})
+check("อัปโหลดรูปได้", r["ok"])
+check("snapshot บอกเวอร์ชันรูป (pv) ของนักแสดง", next(a for a in bridge.snapshot()["actors"] if a["id"] == aid)["pv"] == 1234567890123)
+got = bridge.handle("getPhotos", {"ids": [aid]})
+check("getPhotos คืนรูปที่เก็บไว้", got["ok"] and got["result"][str(aid)]["url"] == PNG)
+check("ไฟล์ที่ไม่ใช่รูปจริงถูกปฏิเสธ", not bridge.handle("setPhoto", {"id": aid, "photo": "data:image/png;base64," + base64.b64encode(b"not an image").decode()})["ok"])
+check("ข้อมูลที่ไม่ใช่ data URL ถูกปฏิเสธ", not bridge.handle("setPhoto", {"id": aid, "photo": "http://evil.example/a.png"})["ok"])
+check("รูปใหญ่เกินกำหนดถูกปฏิเสธ", not bridge.handle("setPhoto", {"id": aid, "photo": "data:image/png;base64," + "A" * 200000})["ok"])
+check("ลบรูปได้", bridge.handle("clearPhoto", {"id": aid})["ok"] and next(a for a in bridge.snapshot()["actors"] if a["id"] == aid)["pv"] == 0)
+check("ไม่ยัดรูปทั้งก้อนลง SQL log", all(len(x) < 400 for x in [str(i) for i in bridge.handle("setPhoto", {"id": aid, "photo": PNG})["sql"]]))
+check("ensure_schema รันซ้ำได้และข้อมูลรูปไม่หาย", db.ensure_schema() is None and db.ensure_schema() is None
+      and bridge.handle("getPhotos", {"ids": [aid]})["result"][str(aid)]["url"] == PNG)
+
+TOTAL = 14 + 9
+print(f"\nผ่าน {ok} / {TOTAL} ข้อ")
+sys.exit(0 if ok == TOTAL else 1)

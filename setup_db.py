@@ -75,7 +75,8 @@ def main():
     print("กำลังสร้างฐานข้อมูล casting_agency ...")
     if SKIP_CREATE_DB:      # ลบตารางเก่าของเราทิ้งก่อน (ลำดับไม่สำคัญเพราะปิดการเช็ก FK ชั่วคราว)
         cur.execute("SET FOREIGN_KEY_CHECKS = 0")
-        for t in ("PAYMENT_INSTALLMENT", "SCHEDULE", "ROLE_SKILL", "`ROLE`", "PORTFOLIO", "ACTOR_SKILL", "SKILL", "ACTOR", "PROJECT"):
+        for t in ("PAYMENT_INSTALLMENT", "SCHEDULE", "ROLE_SKILL", "`ROLE`", "PORTFOLIO", "ACTOR_SKILL", "ACTOR_PHOTO",
+                  "SKILL", "ACTOR", "PROJECT"):
             cur.execute(f"DROP TABLE IF EXISTS {t}")
         cur.execute("SET FOREIGN_KEY_CHECKS = 1")
     run_file(cur, "schema.sql")

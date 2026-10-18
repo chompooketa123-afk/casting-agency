@@ -36,6 +36,8 @@ header[data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecor
 [data-testid="stMainBlockContainer"], .block-container { padding: 0 !important; max-width: none !important; }
 [data-testid="stVerticalBlock"] { gap: 0 !important; }
 [data-testid="stAppViewContainer"] > section, [data-testid="stMain"] { overflow-x: clip; }
+/* Streamlit ทำให้เนื้อหาจางลง (opacity 0.33) ระหว่างรันสคริปต์ใหม่ ซึ่งบนฐานข้อมูลคลาวด์ใช้เวลานานจนเห็นเป็นหน้าจางๆ
+   หน้าเราวาดข้อมูลใหม่เองอยู่แล้ว เลยปิดเอฟเฟกต์นี้ */
 [data-stale="true"], [data-testid="stElementContainer"] { opacity: 1 !important; transition: none !important; }
 </style>""")
 
@@ -53,6 +55,18 @@ if error:
 แก้เสร็จแล้วกด **R** บนหน้านี้ หรือรีเฟรชเบราว์เซอร์
 """)
     st.stop()
+
+
+@st.cache_resource
+def _upgrade_db():
+    """อัปเกรดโครงสร้างฐานข้อมูลเดิมให้มีส่วนรูปโปรไฟล์ (ทำครั้งเดียวทั้งแอป ข้อมูลเดิมไม่หาย)"""
+    return db.ensure_schema()
+
+
+upgrade_error = _upgrade_db()
+if upgrade_error:
+    st.warning("อัปเกรดฐานข้อมูลเพื่อรองรับรูปโปรไฟล์ไม่สำเร็จ (ส่วนอื่นของเว็บยังใช้ได้): " + upgrade_error,
+               icon=":material/warning:")
 
 
 @st.cache_resource

@@ -38,9 +38,18 @@ def _get_conn():
 # ---------------------------------------------------------------------
 # SQL log : เก็บคำสั่งล่าสุดไว้โชว์ (เก็บใน session ของผู้ใช้แต่ละคน)
 # ---------------------------------------------------------------------
+def _short(v):
+    """ค่าที่ยาวมาก (เช่นรูปแบบ base64) ย่อก่อนจดลง log ไม่ให้ log บวมและไม่ส่งรูปเต็มกลับไปโชว์ในหน้า 'SQL ที่เพิ่งรัน'"""
+    if isinstance(v, str) and len(v) > 120:
+        return v[:30] + f"… (ยาว {len(v):,} ตัวอักษร)"
+    return v
+
+
 def _log(sql, params):
     try:
         log = st.session_state.setdefault("sql_log", [])
+        if isinstance(params, (list, tuple)):
+            params = tuple(_short(x) for x in params)
         log.append((" ".join(sql.split()), params))
         del log[:-40]           # เก็บแค่ 40 คำสั่งล่าสุด
     except Exception:
@@ -138,6 +147,24 @@ def transaction():
         raise
     finally:
         conn.close()
+
+
+def ensure_schema():
+    """อัปเกรดฐานข้อมูลที่สร้างไว้ก่อนหน้าให้มีส่วนรูปโปรไฟล์ (คอลัมน์ ACTOR.photo_ver + ตาราง ACTOR_PHOTO)
+    รันซ้ำกี่ครั้งก็ได้ ไม่แตะข้อมูลเดิม ไม่ต้องรัน setup_db.py ใหม่ (setup_db.py จะลบข้อมูลทั้งหมด)
+    คืน None ถ้าเรียบร้อย หรือข้อความ error ถ้าอัปเกรดไม่ได้"""
+    try:
+        cols = query("SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS "
+                     "WHERE TABLE_SCHEMA = DATABASE() AND LOWER(TABLE_NAME) = 'actor'", log=False)
+        if "photo_ver" not in {r["c"].lower() for r in cols}:
+            execute("ALTER TABLE ACTOR ADD COLUMN photo_ver BIGINT NOT NULL DEFAULT 0")
+        execute("CREATE TABLE IF NOT EXISTS ACTOR_PHOTO ("
+                "actor_id INT PRIMARY KEY, photo MEDIUMTEXT NOT NULL, "
+                "updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                "CONSTRAINT fk_photo_actor FOREIGN KEY (actor_id) REFERENCES ACTOR(actor_id) ON DELETE CASCADE)")
+        return None
+    except mysql.connector.Error as e:
+        return str(e)
 
 
 def check_connection():

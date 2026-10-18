@@ -299,12 +299,32 @@ function pgDash() {
 
 /* ---------- ฝั่งนักแสดง ---------- */
 const RG = ['name', 'gender', 'status', 'birth', 'prov', 'exp', 'h', 'w', 'bust', 'waist', 'hip', 'shoe', 'size', 'body', 'skin', 'hairC', 'hairL', 'hairT', 'eye', 'look', 'bio'];
+/* กล่องรูปโปรไฟล์ mode 'rg' = ฟอร์มสมัคร/แก้ไข (รูปที่เลือกเป็นฉบับร่าง บันทึกพร้อมฟอร์ม) / 'pf' = หน้าโปรไฟล์ (อัปโหลดทันที) */
+function photoBox(mode) {
+  const me = meActor(), editing = mode === 'pf' || S.rgMode === 'edit';
+  const draft = mode === 'rg' ? F['rg.photo'] : undefined;      // undefined = ไม่เปลี่ยน, null = ลบรูป, ข้อความ = รูปใหม่ที่เลือก
+  let pv, has;
+  if (typeof draft === 'string') { pv = `<img class="avatar photo" src="${draft}" alt="รูปที่เลือก">`; has = true; }
+  else if (!editing) { pv = '<div class="ph-empty"><b>ยังไม่มีรูป</b><span>ถ้าไม่ใส่ ระบบใช้ภาพวาดตัวแทนให้</span></div>'; has = false; }
+  else if (draft === null) { pv = avatarSvg(me); has = false; }
+  else { pv = avatar(me); has = !!me.pv; }
+  const note = mode === 'rg'
+    ? 'รูปที่เลือกจะถูกเก็บลงฐานข้อมูลเมื่อกดปุ่มบันทึกด้านล่าง'
+    : 'อัปโหลดทันทีที่เลือกรูป ไม่ต้องกดบันทึกอีก';
+  return `<div class="photobox"><div class="pv">${pv}</div><div class="pb-side">
+    <p class="pb-note">รูปจะแสดงในแคตตาล็อกและโปรไฟล์ที่ผู้จัดงานเห็น (เมื่อโปรไฟล์เผยแพร่อยู่) ใช้รูปของตัวเองเท่านั้น และเลือกเฉพาะรูปที่ยินดีให้คนอื่นเห็น เพราะทุกคนที่มีลิงก์เว็บนี้เปิดดูได้</p>
+    <div class="btns" style="margin:.7rem 0 0"><button type="button" class="btn primary" data-act="ph_pick" data-m="${mode}">${has ? 'เปลี่ยนรูป' : 'เลือกรูป'}</button>${has ? `<button type="button" class="btn danger" data-act="ph_del" data-m="${mode}">${typeof draft === 'string' ? 'ยกเลิกรูปที่เลือก' : 'ลบรูป'}</button>` : ''}</div>
+    <p class="hint" style="margin-top:.6rem">${note} · ระบบย่อและตัดรูปเป็นสัดส่วน 4:5 ให้เอง (ไฟล์ JPG, PNG)</p>
+    <input type="file" accept="image/*" hidden id="phin-${mode}" data-photo="${mode}"></div></div>`;
+}
 function loadRg(a) {
+  delete F['rg.photo'];
   RG.forEach(k => { F['rg.' + k] = a[k] ?? ''; });
   ['tattoo', 'pierce', 'travel'].forEach(k => { F['rg.' + k] = !!a[k]; });
   F['rg.sk'] = a.skills.slice(); S.rgLoaded = a.id;
 }
 function clearRg() {
+  delete F['rg.photo'];
   RG.forEach(k => { delete F['rg.' + k]; }); ['tattoo', 'pierce', 'travel', 'publish'].forEach(k => delete F['rg.' + k]); F['rg.sk'] = []; S.rgLoaded = null;
 }
 function gatherRg() { const o = {}; RG.forEach(k => { o[k] = F['rg.' + k]; }); ['tattoo', 'pierce', 'travel'].forEach(k => { o[k] = !!F['rg.' + k]; }); return o; }
@@ -316,6 +336,7 @@ function pgRegister() {
   return pgHead('สำหรับนักแสดง', edit ? 'แก้โปรไฟล์' : 'สมัครเป็นนักแสดง / โมเดล', 'กรอกให้ตรงตามจริง ข้อมูลรูปลักษณ์ใช้ให้ผู้จัดงานกรองหาคน (ระบบรับเฉพาะอายุ 18 ปีขึ้นไป)') +
     `<div class="tabs" role="tablist"><button role="tab" aria-selected="${!edit}" data-act="rg_mode" data-v="new">สมัครใหม่</button><button role="tab" aria-selected="${edit}" data-act="rg_mode" data-v="edit">แก้โปรไฟล์ของฉัน</button></div>` +
     (edit ? actorBar() + '<div style="height:1rem"></div>' : '') +
+    sec('รูปโปรไฟล์', 'ไม่บังคับ ใส่รูปแล้วผู้จัดงานจะเห็นหน้าคุณตอนเลือกนักแสดง') + `<div class="form-card">${photoBox('rg')}</div>` +
     sec('ข้อมูลหลัก') + `<div class="form-card"><div class="grid g3">${fld('ชื่อ-นามสกุล', inp(r('name'), { ph: 'เช่น สมหญิง ใจดี' }))}${fld('เพศ', sel(r('gender'), objOpts(L.gender), { def: 'Female' }))}${edit ? fld('สถานะ', sel(r('status'), objOpts(L.actorSt))) : fld('วันเกิด', inp(r('birth'), { type: 'date' }))}
       ${edit ? fld('วันเกิด', inp(r('birth'), { type: 'date' })) : ''}${fld('จังหวัด', sel(r('prov'), [['', 'ไม่ระบุ'], ...PROVINCES.map(x => [x, x])]))}${fld('ระดับประสบการณ์', sel(r('exp'), objOpts(L.exp), { def: 'Beginner' }))}</div>
       <div style="margin-top:.8rem">${chk(r('travel'), 'เดินทางต่างจังหวัดได้')}</div></div>` +
@@ -340,6 +361,7 @@ function pgProfile() {
       <p>${me.pub ? 'คุณจะอยู่ในแคตตาล็อก ผลค้นหา และรายชื่อจับคู่ ปิดได้ทุกเมื่อ' : 'ผู้จัดงานจะไม่เห็นคุณในแคตตาล็อก ค้นหา หรือจับคู่ จนกว่าจะเผยแพร่'}</p>
       <div class="checks">${ck(rd.hasName, 'มีชื่อ')}${ck(rd.nSkills > 0, `แท็กทักษะ ${rd.nSkills}`)}${ck(rd.nWorks > 0, `ผลงาน ${rd.nWorks}`)}${ck(rd.hasBio, 'แนะนำตัว (ไม่บังคับ)')}</div>
       <div class="btns">${me.pub ? '<button class="btn" data-act="pf_hide">ซ่อนโปรไฟล์</button>' : `<button class="btn primary" data-act="pf_pub" ${rd.ready ? '' : 'disabled'}>เผยแพร่โปรไฟล์</button>`}${!rd.ready ? '<span class="hint">เลือกทักษะหรือเพิ่มผลงานอย่างน้อย 1 อย่างก่อน</span>' : ''}</div></div></div>` +
+    sec('รูปโปรไฟล์', 'ผู้จัดงานจะเห็นรูปนี้ในแคตตาล็อกและโปรไฟล์ของคุณ') + `<div class="form-card">${photoBox('pf')}</div>` +
     sec('ชื่อ แนะนำตัว และแท็กทักษะ') + `<div class="form-card">${fld('ชื่อที่แสดง', inp('pf.name'))}<div style="margin-top:.8rem">${fld('แนะนำตัว (ไม่เกิน 500 ตัวอักษร)', ta('pf.bio', { max: 500 }))}</div>
       <div class="lab" style="margin:1rem 0 .2rem">แท็กทักษะ</div>${skillPicker('pf.sk')}<div class="btns"><button class="btn primary" data-act="pf_save">บันทึก</button></div></div>` +
     sec('ผลงาน', `${me.works.length}/${MAX_WORKS} ชิ้น`) +
