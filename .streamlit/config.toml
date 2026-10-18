@@ -1,0 +1,117 @@
+# ธีมของเว็บ (สี ฟอนต์) -- ธีมโมเดลลิ่งหรู: ไอวอรี + ไวน์บอร์โดซ์ + ทองแชมเปญ + ชมพูโรเซ + น้ำเงินมิดไนต์
+# ไฟล์ฟอนต์อยู่ในโฟลเดอร์ static/fonts (ฝังมากับโปรเจกต์ ไม่ต้องต่ออินเทอร์เน็ต)
+# CSS ส่วนที่ปรับละเอียดอยู่ใน theme.css
+
+[server]
+enableStaticServing = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"      # ซ่อนปุ่ม Deploy/เมนูของ Streamlit เวลาแชร์ให้เพื่อนดู
+
+[theme]
+base = "light"
+primaryColor = "#5E1A2E"
+backgroundColor = "#FAF6F2"
+secondaryBackgroundColor = "#F3ECE6"
+textColor = "#1F1A1D"
+linkColor = "#5E1A2E"
+borderColor = "#E8DDD6"
+baseRadius = "0.6rem"
+buttonRadius = "full"
+showSidebarBorder = false
+font = "Prompt, sans-serif"
+headingFont = "Bodoni Moda, Noto Serif Thai, serif"
+headingFontSizes = ["2.6rem", "1.8rem", "1.3rem", "1.1rem", "1rem", "0.9rem"]
+headingFontWeights = [500, 500, 600, 600, 600, 600]
+chartCategoricalColors = ["#5E1A2E", "#B8955A", "#1E2A3F", "#C58C85", "#7F93A8", "#8A7F85"]
+chartSequentialColors = ["#F6EEE8", "#EFDDD6", "#E3C2BC", "#D3A19C", "#BE7F80", "#A25E67", "#85414F", "#68283D", "#4F1A2E", "#3C1222"]
+dataframeHeaderBackgroundColor = "#F3ECE6"
+codeBackgroundColor = "#F3ECE6"
+codeTextColor = "#5E1A2E"
+greenColor = "#2F6F57"
+greenBackgroundColor = "#E1EEE7"
+yellowColor = "#8A6A2C"
+yellowBackgroundColor = "#F7ECD3"
+redColor = "#9B2340"
+redBackgroundColor = "#F6DEE2"
+blueColor = "#2E4468"
+blueBackgroundColor = "#DFE7F1"
+
+[theme.sidebar]
+backgroundColor = "#1E2A3F"
+secondaryBackgroundColor = "#2A3850"
+textColor = "#F3ECE6"
+borderColor = "#3A4863"
+primaryColor = "#D8BF8C"
+linkColor = "#D8BF8C"
+
+# --- ฟอนต์: Prompt = เนื้อหา, Bodoni Moda + Noto Serif Thai = หัวข้อ ---
+[[theme.fontFaces]]
+family = "Prompt"
+url = "app/static/fonts/prompt-thai-400-normal.woff2"
+weight = 400
+unicodeRange = "U+0E01-0E5B,U+200C-200D,U+25CC"
+
+[[theme.fontFaces]]
+family = "Prompt"
+url = "app/static/fonts/prompt-thai-500-normal.woff2"
+weight = 500
+unicodeRange = "U+0E01-0E5B,U+200C-200D,U+25CC"
+
+[[theme.fontFaces]]
+family = "Prompt"
+url = "app/static/fonts/prompt-thai-600-normal.woff2"
+weight = 600
+unicodeRange = "U+0E01-0E5B,U+200C-200D,U+25CC"
+
+[[theme.fontFaces]]
+family = "Prompt"
+url = "app/static/fonts/prompt-latin-400-normal.woff2"
+weight = 400
+unicodeRange = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+
+[[theme.fontFaces]]
+family = "Prompt"
+url = "app/static/fonts/prompt-latin-500-normal.woff2"
+weight = 500
+unicodeRange = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+
+[[theme.fontFaces]]
+family = "Prompt"
+url = "app/static/fonts/prompt-latin-600-normal.woff2"
+weight = 600
+unicodeRange = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+
+[[theme.fontFaces]]
+family = "Bodoni Moda"
+url = "app/static/fonts/bodoni-moda-latin-500-normal.woff2"
+weight = 500
+unicodeRange = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+
+[[theme.fontFaces]]
+family = "Bodoni Moda"
+url = "app/static/fonts/bodoni-moda-latin-700-normal.woff2"
+weight = 700
+unicodeRange = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+
+[[theme.fontFaces]]
+family = "Bodoni Moda"
+url = "app/static/fonts/bodoni-moda-latin-600-italic.woff2"
+weight = 600
+style = "italic"
+unicodeRange = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+
+[[theme.fontFaces]]
+family = "Noto Serif Thai"
+url = "app/static/fonts/noto-serif-thai-thai-500-normal.woff2"
+weight = 500
+unicodeRange = "U+0E01-0E5B,U+200C-200D,U+25CC"
+
+[[theme.fontFaces]]
+family = "Noto Serif Thai"
+url = "app/static/fonts/noto-serif-thai-thai-600-normal.woff2"
+weight = 600
+unicodeRange = "U+0E01-0E5B,U+200C-200D,U+25CC"
